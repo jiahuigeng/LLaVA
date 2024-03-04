@@ -1,4 +1,6 @@
 import argparse
+import pickle
+
 import torch
 
 from llava.constants import IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN
@@ -67,6 +69,11 @@ def main(args):
         else:
             image_tensor = image_tensor.to(model.device, dtype=torch.float16)
 
+    elif args.image_bin:
+        image = args.image_bin
+        image_tensor = pickle.load(open(args.image_bin, 'rb')).to(model.device)
+
+
     while True:
         try:
             inp = input(f"{roles[0]}: ")
@@ -117,9 +124,10 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model-path", type=str, default="facebook/opt-350m")
+    parser.add_argument("--model-path", type=str, default="liuhaotian/llava-v1.5-7b")
     parser.add_argument("--model-base", type=str, default=None)
-    parser.add_argument("--image-file", type=str, default=None)
+    parser.add_argument("--image-file", type=str, default=None) # "https://llava-vl.github.io/static/images/view.jpg"
+    parser.add_argument("--image-bin", type=str, default="prompt.bin") #
     parser.add_argument("--device", type=str, default="cuda")
     parser.add_argument("--conv-mode", type=str, default=None)
     parser.add_argument("--temperature", type=float, default=0.2)

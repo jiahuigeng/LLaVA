@@ -25,7 +25,7 @@ from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.generation.utils import GenerateOutput
 
 from ..llava_arch import LlavaMetaModel, LlavaMetaForCausalLM
-
+import pickle
 
 class LlavaConfig(LlamaConfig):
     model_type = "llava_llama"
@@ -133,6 +133,8 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
             )
         else:
             inputs_embeds = self.get_model().embed_tokens(inputs)
+            # pickle.dump(inputs_embeds, open("input_embeds.bin", "wb"))
+
 
         return super().generate(
             position_ids=position_ids,

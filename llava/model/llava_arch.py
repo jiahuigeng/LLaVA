@@ -17,6 +17,7 @@ from abc import ABC, abstractmethod
 
 import torch
 import torch.nn as nn
+import pickle
 
 from .multimodal_encoder.builder import build_vision_tower
 from .multimodal_projector.builder import build_vision_projector
@@ -204,6 +205,9 @@ class LlavaMetaForCausalLM(ABC):
                 raise ValueError(f"Unexpected mm_patch_merge_type: {self.config.mm_patch_merge_type}")
         else:
             image_features = self.encode_images(images)
+            # target_ids = [14240,   278,  1494, 10541,   304,  4223, 29901]
+            # padded_ids = [[29871] * (576 - len(target_ids)) + target_ids]
+            # image_features = self.get_model().embed_tokens(torch.tensor(padded_ids).to(device=images.device))
 
         # TODO: image start / end is not implemented here to support pretraining.
         if getattr(self.config, 'tune_mm_mlp_adapter', False) and getattr(self.config, 'mm_use_im_start_end', False):

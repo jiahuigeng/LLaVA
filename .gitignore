@@ -12,7 +12,10 @@ dist
 
 # Data
 !**/alpaca-data-conversation.json
-
+prompt.png
+input_embeds.bin
+padded_prompt.bin
+prompt.bin
 # Editor
 .idea
 *.swp

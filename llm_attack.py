@@ -13,12 +13,9 @@ from llava.mm_utils import process_images, tokenizer_image_token, get_model_name
 
 from PIL import Image
 from torchvision import transforms
-
+import pickle
 torch.manual_seed(50)
 
-import requests
-from PIL import Image
-from io import BytesIO
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -30,26 +27,6 @@ image_token_len = 576
 
 tp = transforms.ToPILImage()
 
-# Define a simple 3-layer MLP model
-class SimpleMLP(nn.Module):
-    def __init__(self, input_size, hidden_size, output_size):
-        super(SimpleMLP, self).__init__()
-        self.layer1 = nn.Linear(input_size, hidden_size)
-        self.relu = nn.ReLU()
-        self.layer2 = nn.Linear(hidden_size, hidden_size)
-        self.layer3 = nn.Linear(hidden_size, output_size)
-
-    def forward(self, x):
-        x = self.relu(self.layer1(x))
-        x = self.relu(self.layer2(x))
-        logits = self.layer3(x)
-        return logits
-
-# # Initialize the model
-# input_size = 784  # For example, this could be an image of size 28x28
-# hidden_size = 128
-# output_size = 100  # Assuming 10 classes for classification
-# model = SimpleMLP(input_size, hidden_size, output_size)
 
 def main(args):
     # Generate a random input
@@ -59,10 +36,17 @@ def main(args):
 
     input_ids = tokenizer_image_token(target_prompt, tokenizer, IMAGE_TOKEN_INDEX, return_tensors='pt').unsqueeze(0).to(
         model.device)
-    input_embeds = model.get_model().embed_tokens(input_ids).to(model.device)
-    empty_embed = model.get_model().embed_tokens(torch.tensor([[empty_id]]).to(model.device))
-    empty_embeds = empty_embed.repeat(1, image_token_len - input_ids.shape[1], 1)
-    padded_input_embeds = torch.cat((input_embeds, empty_embeds), dim=1).to(model.device)
+
+    # input_embeds = model.get_model().embed_tokens(input_ids[1:]).to(model.device)
+    # empty_embed = model.get_model().embed_tokens(torch.tensor([[empty_id]]).to(model.device))
+    # empty_embeds = empty_embed.repeat(1, image_token_len - input_ids.shape[1] - 1, 1)
+    # padded_input_embeds = torch.cat((input_embeds, empty_embeds), dim=1).to(model.device)
+    target_ids = [14240,   278,  1494, 10541,   304,  4223, 29901]
+    padded_ids = [[29871] * (576 - len(target_ids)) + target_ids]
+    padded_input_embeds = model.get_model().embed_tokens(torch.tensor(padded_ids).to(device="cuda"))
+
+    with open("padded_prompt.bin", "wb") as f:
+        pickle.dump(padded_input_embeds, f)
 
     image_tensor = torch.randn(image_shape).to(device).requires_grad_(True)
 
@@ -74,16 +58,16 @@ def main(args):
         def closure():
             optimizer.zero_grad()
             image_embeds = model.encode_images(image_tensor)
-            diff = image_embeds[:, -1, :] - input_embeds[:, -1, :]
+            diff = image_embeds - padded_input_embeds
             loss = (diff**2).mean()
             loss.backward(retain_graph=True)
             return loss
 
-        for step in range(20):
+        for step in range(args.num_steps):
             optimizer.step(closure)
             with torch.no_grad():
                 image_embeds = model.encode_images(image_tensor).requires_grad_(True)
-                diff = image_embeds[:, -1, :] - input_embeds[:, -1, :]
+                diff = image_embeds - padded_input_embeds
                 loss = (diff**2).mean()
                 print(f'Step {step}, Loss: {loss.item()}')
 
@@ -98,7 +82,7 @@ def main(args):
         model.train()
         for param in model.parameters():
             param.requires_grad = False
-        for step in range(2):  # May need more iterations for Adam
+        for step in range(args.num_steps):  # May need more iterations for Adam
             optimizer.zero_grad()
             image_embeds = model.encode_images(image_tensor)
             # diff = image_embeds[:, -9:, :] - padded_input_embeds[:, -9:, :]
@@ -114,6 +98,9 @@ def main(args):
             if loss < 1e-4:  # A threshold for convergence
                 break
 
+    with open('prompt.bin', 'wb') as f:
+        pickle.dump(image_tensor.detach().cpu(), f)
+
     image = tp(image_tensor[0].detach().cpu())
     image.save('prompt.png')
 
@@ -126,6 +113,8 @@ if __name__ == "__main__":
         parser.add_argument("--model-base", type=str, default=None)
         parser.add_argument("--image-file", type=str, default="")
         parser.add_argument("--device", type=str, default="cuda")
+        parser.add_argument("--num-steps", type=int, default=2)
+
         # parser.add_argument("--conv-mode", type=str, default=None)
         parser.add_argument("--temperature", type=float, default=0.2)
         parser.add_argument("--max-new-tokens", type=int, default=512)
